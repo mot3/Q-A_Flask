@@ -1,6 +1,5 @@
-from flask import (Flask, render_template, g, request, session)
-from flask.helpers import url_for
-from werkzeug.utils import redirect, secure_filename
+from flask import (Flask, render_template, g, request, session, url_for)
+from werkzeug.utils import redirect
 from Database.database import get_db
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
@@ -26,7 +25,7 @@ def get_current_user():
 
         # get username and password from database where name equal to username login
         user_cur = db.execute(
-            'SELECT name, password, expert, admin FROM users WHERE name = ?', [user_cookie])
+            'SELECT id, name, password, expert, admin FROM users WHERE name = ?', [user_cookie])
         user_result = user_cur.fetchone()
 
     return user_result
@@ -41,6 +40,8 @@ def index():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    user = get_current_user()
+
     if request.method == 'POST':
         db = get_db()
 
@@ -56,12 +57,13 @@ def register():
 
         return redirect(url_for('index'))
 
-    return render_template('register.html')
-
+    return render_template('register.html', user=user)
 
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    user = get_current_user()
+
     if request.method == 'POST':
         db = get_db()
 
@@ -81,7 +83,7 @@ def login():
         else:
             return redirect('login')
 
-    return render_template('login.html')
+    return render_template('login.html', user=user)
 
 
 @app.route('/question')
@@ -91,28 +93,65 @@ def question():
     return render_template('question.html', user=user)
 
 
-@app.route('/answer')
-def answer():
+@app.route('/answer/<question_id>', methods=['GET', 'POST'])
+def answer(question_id):
     user = get_current_user()
+    db = get_db()
 
-    return render_template('answer.html', user=user)
+    if request.method == 'POST':
+        # add answer to a question
+        db.execute('UPDATE questions SET answer_text = ? WHERE id = ?', [
+                   request.form['answer'], question_id])
+        db.commit()
+
+        return redirect(url_for('unanswered'))
+
+    # get questions for an expert
+    question_cur = db.execute(
+        'SELECT id, questions_text FROM questions WHERE id = ?', [question_id])
+    question_result = question_cur.fetchone()
+
+    return render_template('answer.html', user=user, question=question_result)
 
 
-@app.route('/ask')
+@app.route('/ask', methods=['GET', 'POST'])
 def ask():
     user = get_current_user()
+    db = get_db()
 
-    return render_template('ask.html', user=user)
+    if request.method == 'POST':
+        # add a question from a normal user for an specific expert
+        db.execute('INSERT INTO questions(questions_text, asked_by_id, expert_id) VALUES (?, ?, ?)', [
+                   request.form['question'], user['id'], request.form['expert']])
+        db.commit()
+
+        return redirect(url_for('index'))
+
+    # get all expert for dropdown
+    expert_cur = db.execute('SELECT id, name FROM users WHERE expert = 1')
+    expert_results = expert_cur.fetchall()
+
+    return render_template('ask.html', user=user, experts=expert_results)
 
 
 @app.route('/unanswered')
 def unanswered():
     user = get_current_user()
 
-    return render_template('unanswered.html', user=user)
+    db = get_db()
+
+    # get all question for an expert user
+    question_cur = db.execute(
+        '''SELECT questions.id, questions.questions_text, users.name
+        FROM questions
+        JOIN users ON questions.asked_by_id = users.id
+        WHERE questions.answer_text IS null AND questions.expert_id = ?''', [user['id']])
+    question_results = question_cur.fetchall()
+
+    return render_template('unanswered.html', user=user, questions=question_results)
 
 
-@app.route('/users')
+@ app.route('/users')
 def users():
     user = get_current_user()
 
@@ -124,17 +163,19 @@ def users():
 
     return render_template('users.html', user=user, users=users_results)
 
-@app.route('/promote/<user_id>')
+
+@ app.route('/promote/<user_id>')
 def promote(user_id):
     db = get_db()
 
     # promote a user to expert
     db.execute('UPDATE users SET expert = 1 WHERE id = ?', [user_id])
     db.commit()
+
     return redirect(url_for('users'))
 
 
-@app.route('/logout')
+@ app.route('/logout')
 def logout():
     # destroy session
     session.pop('user', None)
