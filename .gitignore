@@ -1,4 +1,3 @@
 /.vscode
 Database/questions.db
 **/__pycache__/**
-/postgress_QA_flask/**
