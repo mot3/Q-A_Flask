@@ -4,7 +4,7 @@ CREATE TABLE users (
   password text not null,
   expert boolean not null,
   admin boolean not null
-);a
+);
 
 CREATE TABLE questions(
   id integer primary key autoincrement,
