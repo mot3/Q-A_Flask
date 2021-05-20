@@ -34,16 +34,40 @@ def get_current_user():
 @app.route('/')
 def index():
     user = get_current_user()
+    db = get_db()
 
-    return render_template('home.html', user=user)
+    question_cur = db.execute(
+        '''SELECT 
+            questions.id,
+            questions.questions_text,
+            askers.name as asker_name,
+            experts.name as expert_name
+        FROM questions
+        JOIN users as askers ON askers.id = questions.asked_by_id
+        JOIN users as experts ON experts.id = questions.expert_id
+        WHERE questions.answer_text IS NOT null''')
+    question_results = question_cur.fetchall()
+
+    return render_template('home.html', user=user, questions=question_results)
 
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     user = get_current_user()
 
+    if user:
+        return redirect(url_for('index'))
+
     if request.method == 'POST':
         db = get_db()
+
+        existing_user_cur = db.execute(
+            'SELECT id FROM users WHERE name = ?', [request.form['name']])
+        existing_user = existing_user_cur.fetchone()
+
+        if existing_user:
+            error = 'User already exists!'
+            return render_template('register.html', user=user, error=error)
 
         hashed_password = generate_password_hash(
             request.form['password'], method='sha256')  # make hash password
@@ -64,6 +88,9 @@ def register():
 def login():
     user = get_current_user()
 
+    if user:
+        return redirect(url_for('index'))
+
     if request.method == 'POST':
         db = get_db()
 
@@ -81,21 +108,42 @@ def login():
             session['user'] = user_result['name']
             return redirect(url_for('index'))
         else:
-            return redirect('login')
+            error = 'Username or password Invalid!'
+            return render_template('login.html', user=user, error=error)
 
     return render_template('login.html', user=user)
 
 
-@app.route('/question')
-def question():
+@app.route('/question/<question_id>')
+def question(question_id):
     user = get_current_user()
+    db = get_db()
 
-    return render_template('question.html', user=user)
+    question_cur = db.execute(
+        '''SELECT 
+            questions.questions_text,
+            questions.answer_text,
+            askers.name as asker_name,
+            experts.name as expert_name
+        FROM questions
+        JOIN users as askers ON askers.id = questions.asked_by_id
+        JOIN users as experts ON experts.id = questions.expert_id
+        WHERE questions.id = ?''', [question_id])
+    question_result = question_cur.fetchone()
+
+    return render_template('question.html', user=user, question=question_result)
 
 
 @app.route('/answer/<question_id>', methods=['GET', 'POST'])
 def answer(question_id):
     user = get_current_user()
+
+    if not user:
+        return redirect(url_for('login'))
+
+    if user['expert'] == 0:
+        return redirect(url_for('index'))
+
     db = get_db()
 
     if request.method == 'POST':
@@ -117,6 +165,10 @@ def answer(question_id):
 @app.route('/ask', methods=['GET', 'POST'])
 def ask():
     user = get_current_user()
+
+    if not user:
+        return redirect(url_for('login'))
+
     db = get_db()
 
     if request.method == 'POST':
@@ -138,6 +190,12 @@ def ask():
 def unanswered():
     user = get_current_user()
 
+    if not user:
+        return redirect(url_for('login'))
+
+    if user['expert'] == 0:
+        return redirect(url_for('index'))
+
     db = get_db()
 
     # get all question for an expert user
@@ -155,6 +213,12 @@ def unanswered():
 def users():
     user = get_current_user()
 
+    if not user:
+        return redirect(url_for('login'))
+
+    if user['admin'] == 0:
+        return redirect(url_for('index'))
+
     db = get_db()
 
     # get list of all the users
@@ -166,6 +230,14 @@ def users():
 
 @ app.route('/promote/<user_id>')
 def promote(user_id):
+    user = get_current_user()
+
+    if not user:
+        return redirect(url_for('login'))
+
+    if user['admin'] == 0:
+        return redirect(url_for('index'))
+
     db = get_db()
 
     # promote a user to expert
