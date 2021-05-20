@@ -34,7 +34,7 @@
           <li><a href="{{ url_for('ask') }}">Ask Question</a></li>
           {% endif %}
           {% if user and user.expert == 1 %}
-          <li><a href="{{ url_for('answer') }}">Answer Questions</a></li>
+          <li><a href="{{ url_for('unanswered') }}">Answer Questions</a></li>
           {% endif %}
           {% if user and user.admin == 1 %}
           <li><a href="{{ url_for('users') }}">User Setup</a></li>
@@ -51,17 +51,17 @@
   <div class="container theme-showcase" role="main">
 
     <div class="page-header">
-      <h1>What?</h1>
+      <h1>{{ question.questions_text }}</h1>
     </div>
     <div class="row">
       <div class="col-lg-12">
         <div class="well bs-component">
-          <form class="form-horizontal">
+          <form class="form-horizontal" method="POST" action="{{ url_for('answer', question_id=question['id']) }}">
             <fieldset>
               <div class="form-group">
                 <label for="textArea" class="col-lg-2 control-label">Answer</label>
                 <div class="col-lg-10">
-                  <textarea class="form-control" rows="3" id="textArea"></textarea>
+                  <textarea class="form-control" rows="3" name="answer" id="textArea"></textarea>
                 </div>
               </div>
               <div class="form-group">
